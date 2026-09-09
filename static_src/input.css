@@ -1,0 +1,130 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+@source "../templates/**/*.html";
+@source "../apps/**/*.py";
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(0.985 0.002 247.839);
+  --foreground: oklch(0.145 0.012 256.848);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0.012 256.848);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0.012 256.848);
+  --primary: oklch(0.51 0.15 153.7);
+  --primary-foreground: oklch(0.985 0.005 150);
+  --secondary: oklch(0.965 0.005 247.858);
+  --secondary-foreground: oklch(0.205 0.018 255.565);
+  --muted: oklch(0.965 0.005 247.858);
+  --muted-foreground: oklch(0.556 0.03 256.802);
+  --accent: oklch(0.94 0.035 150);
+  --accent-foreground: oklch(0.28 0.07 153);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0.013 255.508);
+  --input: oklch(0.922 0.013 255.508);
+  --ring: oklch(0.51 0.15 153.7);
+  --chart-1: oklch(0.51 0.15 153.7);
+  --chart-2: oklch(0.62 0.14 205);
+  --chart-3: oklch(0.63 0.16 70);
+  --chart-4: oklch(0.58 0.16 275);
+  --sidebar: oklch(0.985 0.002 247.839);
+  --sidebar-foreground: oklch(0.145 0.012 256.848);
+  --sidebar-primary: oklch(0.51 0.15 153.7);
+  --sidebar-primary-foreground: oklch(0.985 0.005 150);
+  --sidebar-accent: oklch(0.94 0.035 150);
+  --sidebar-accent-foreground: oklch(0.28 0.07 153);
+  --sidebar-border: oklch(0.922 0.013 255.508);
+  --sidebar-ring: oklch(0.51 0.15 153.7);
+}
+
+.dark {
+  --background: oklch(0.145 0.012 256.848);
+  --foreground: oklch(0.985 0.002 247.839);
+  --card: oklch(0.205 0.018 255.565);
+  --card-foreground: oklch(0.985 0.002 247.839);
+  --popover: oklch(0.205 0.018 255.565);
+  --popover-foreground: oklch(0.985 0.002 247.839);
+  --primary: oklch(0.72 0.15 153.7);
+  --primary-foreground: oklch(0.16 0.04 153.7);
+  --secondary: oklch(0.269 0.02 255.701);
+  --secondary-foreground: oklch(0.985 0.002 247.839);
+  --muted: oklch(0.269 0.02 255.701);
+  --muted-foreground: oklch(0.708 0.03 256.788);
+  --accent: oklch(0.31 0.06 153.7);
+  --accent-foreground: oklch(0.95 0.02 153.7);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.72 0.15 153.7);
+  --sidebar: oklch(0.205 0.018 255.565);
+  --sidebar-foreground: oklch(0.985 0.002 247.839);
+  --sidebar-primary: oklch(0.72 0.15 153.7);
+  --sidebar-primary-foreground: oklch(0.16 0.04 153.7);
+  --sidebar-accent: oklch(0.269 0.04 153.7);
+  --sidebar-accent-foreground: oklch(0.985 0.002 247.839);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.72 0.15 153.7);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) * .75);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) * 1.25);
+  --radius-xl: calc(var(--radius) * 1.6);
+}
+
+@layer base {
+  * { border-color: var(--border); }
+  html { -webkit-tap-highlight-color: transparent; }
+  body { min-height: 100vh; background: var(--background); color: var(--foreground); }
+  button, a, input, select, textarea { touch-action: manipulation; }
+  ::selection { background: color-mix(in oklab, var(--primary) 24%, transparent); }
+}
+
+@layer components {
+  .ui-card { @apply rounded-xl border border-border bg-card text-card-foreground shadow-sm; }
+  .ui-button { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50; }
+  .ui-button-primary { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50; }
+  .ui-button-outline { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50; }
+  .ui-badge { @apply inline-flex items-center rounded-md border border-border px-2 py-1 text-xs font-medium; }
+  .ui-label { @apply text-sm font-medium leading-none; }
+  .ui-muted { @apply text-sm text-muted-foreground; }
+}
+
+[x-cloak] { display: none !important; }
+.htmx-indicator { opacity: 0; transition: opacity .2s ease; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+.htmx-swapping { opacity: .65; transition: opacity .12s ease; }

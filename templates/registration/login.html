@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% load i18n static %}{% block anonymous %}
+<div class="flex min-h-screen items-center justify-center bg-background p-4">
+  <div class="w-full max-w-sm">
+    <div class="mb-5 text-center"><div class="mx-auto mb-3 flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"><i data-lucide="wheat" class="size-6"></i></div><h1 class="text-2xl font-semibold tracking-tight">{{ chakki.brand_name|default:'Chakki ERP' }}</h1><p class="mt-1 text-sm text-muted-foreground">{% trans "Sign in to manage your mill" %}</p></div>
+    <form method="post" class="ui-card space-y-4 p-5 sm:p-6">{% csrf_token %}
+      {% if form.errors %}<div class="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{% trans "Invalid username or password." %}</div>{% endif %}
+      <div class="space-y-1.5"><label class="ui-label block">{% trans "Username" %}</label><input name="username" autofocus required autocomplete="username" class="w-full rounded-md border border-input bg-background px-3 py-2.5 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/25"></div>
+      <div class="space-y-1.5"><label class="ui-label block">{% trans "Password" %}</label><input type="password" name="password" required autocomplete="current-password" class="w-full rounded-md border border-input bg-background px-3 py-2.5 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/25"></div>
+      <button class="ui-button-primary w-full"><i data-lucide="log-in" class="size-4"></i>{% trans "Sign in" %}</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

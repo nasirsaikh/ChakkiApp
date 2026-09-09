@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% load i18n %}{% block content %}
+{{ buyback_rates|json_script:"buyback-rate-data" }}
+<div class="mb-4"><h1 class="text-2xl font-bold">{% trans "Buyback" %}</h1><p class="text-sm text-muted-foreground">{% trans "Customer by-product value minus milling/extraction fee" %}</p></div>
+<div class="grid gap-4 xl:grid-cols-[440px_1fr]">
+<form method="post" class="space-y-3 rounded-2xl border bg-card p-4 shadow-sm" x-data="{rates:JSON.parse(document.getElementById('buyback-rate-data').textContent), product:'', qty:0, fee:0, applied:0, get system(){return Number(this.rates[this.product]||0)}, chooseProduct(v){this.product=v; this.applied=this.system; const a=document.getElementById('id_applied_rate_per_kg'); const sr=document.getElementById('id_system_rate_per_kg'); if(a){a.value=this.applied}; if(sr){sr.value=this.system}}, get value(){return Number(this.qty||0)*Number(this.applied||0)}, get net(){return this.value-Number(this.fee||0)}}">
+{% csrf_token %}
+{% for field in form %}
+<div {% if field.name == 'system_rate_per_kg' %}class="hidden"{% endif %}>
+<label class="mb-1 block text-sm font-semibold">{{ field.label }}</label>
+<div {% if field.name == 'product_type' %}x-on:change="chooseProduct($event.target.value)"{% elif field.name == 'quantity_kg' %}x-on:input="qty=$event.target.value"{% elif field.name == 'processing_fee' %}x-on:input="fee=$event.target.value"{% elif field.name == 'applied_rate_per_kg' %}x-on:input="applied=$event.target.value"{% endif %}>{{ field }}</div>
+{% if field.help_text %}<p class="mt-1 text-xs text-muted-foreground">{{ field.help_text }}</p>{% endif %}
+{% for error in field.errors %}<p class="mt-1 text-xs text-red-600">{{ error }}</p>{% endfor %}
+</div>
+{% endfor %}
+<div class="rounded-xl bg-primary/10 p-4 text-sm"><div class="grid grid-cols-2 gap-2"><span>{% trans "System buyback rate" %}</span><b class="text-right">₹<span x-text="system.toFixed(2)"></span>/kg</b><span>{% trans "Buyback value" %}</span><b class="text-right">₹<span x-text="value.toFixed(2)"></span></b><span>{% trans "Processing fee" %}</span><b class="text-right">₹<span x-text="Number(fee||0).toFixed(2)"></span></b><span class="font-semibold">{% trans "Net Customer Payable" %}</span><b class="text-right text-lg">₹<span x-text="net.toFixed(2)"></span></b></div></div>
+{% if form.non_field_errors %}<div class="rounded-xl bg-red-50 p-3 text-sm text-red-700">{{ form.non_field_errors }}</div>{% endif %}
+<button class="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white">{% trans "Post Buyback" %}</button></form>
+<div class="space-y-3">{% for tx in transactions %}<div class="rounded-2xl border bg-card p-4 shadow-sm"><div class="flex justify-between gap-3"><div><b>{{ tx.reference }}</b><div class="text-sm text-muted-foreground">{{ tx.customer.name }}</div></div><div class="text-right"><div class="text-xs text-muted-foreground">{% trans "Net Customer Payable" %}</div><div class="text-lg font-bold">₹{{ tx.net_customer_payable }}</div></div></div><div class="mt-3 grid grid-cols-2 gap-2 text-sm"><div class="rounded-lg bg-muted/40 p-2">{% trans "Buyback value" %}: ₹{{ tx.buyback_value }}</div><div class="rounded-lg bg-muted/40 p-2">{% trans "Processing fee" %}: ₹{{ tx.processing_fee }}</div></div></div>{% empty %}<div class="rounded-2xl border bg-card p-8 text-center text-muted-foreground">{% trans "No buybacks yet." %}</div>{% endfor %}</div>
+</div>
+{% endblock %}

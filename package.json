@@ -1,0 +1,12 @@
+{
+  "name": "chakki-erp-ui",
+  "private": true,
+  "scripts": {
+    "build:css": "npx @tailwindcss/cli -i ./static_src/input.css -o ./static/css/app.css --minify",
+    "watch:css": "npx @tailwindcss/cli -i ./static_src/input.css -o ./static/css/app.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.0",
+    "tailwindcss": "^4.1.0"
+  }
+}

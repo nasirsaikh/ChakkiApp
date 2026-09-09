@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% load i18n %}{% block content %}
+<div class="mb-5 flex flex-wrap items-start justify-between gap-3">
+  <div><h1 class="text-2xl font-semibold tracking-tight">{% trans "Settings" %}</h1><p class="mt-1 text-sm text-muted-foreground">{% trans "System configuration is read-only here. Owners manage configuration in Django Admin." %}</p></div>
+  {% if user.is_staff %}<a href="{% url 'admin:index' %}" hx-boost="false" class="ui-button-primary"><i data-lucide="shield-cog" class="size-4"></i>{% trans "Open Django Admin" %}</a>{% endif %}
+</div>
+<div class="grid gap-4 xl:grid-cols-2">
+  <section class="ui-card p-4 sm:p-5">
+    <div class="mb-4 flex items-center gap-2"><i data-lucide="store" class="size-5 text-primary"></i><h2 class="font-semibold">{% trans "Chakki configuration" %}</h2></div>
+    <dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+      <div><dt class="text-muted-foreground">{% trans "Brand" %}</dt><dd class="font-medium">{{ chakki_settings.brand_name }}</dd></div>
+      <div><dt class="text-muted-foreground">{% trans "Owner" %}</dt><dd class="font-medium">{{ chakki_settings.owner_name|default:'—' }}</dd></div>
+      <div><dt class="text-muted-foreground">{% trans "Village" %}</dt><dd class="font-medium">{{ chakki_settings.village|default:'—' }}</dd></div>
+      <div><dt class="text-muted-foreground">{% trans "Currency" %}</dt><dd class="font-medium">{{ chakki_settings.currency_code }} ({{ chakki_settings.currency_symbol }})</dd></div>
+      <div><dt class="text-muted-foreground">{% trans "Default grinding rate" %}</dt><dd class="font-medium">{{ chakki_settings.currency_symbol }}{{ chakki_settings.default_grinding_rate }}/kg</dd></div>
+      <div><dt class="text-muted-foreground">{% trans "Default language" %}</dt><dd class="font-medium">{{ chakki_settings.get_default_language_display }}</dd></div>
+    </dl>
+    {% if user.is_staff %}<a href="{% url 'admin:configuration_chakkisettings_changelist' %}" hx-boost="false" class="ui-button-outline mt-5"><i data-lucide="pencil" class="size-4"></i>{% trans "Edit in Admin" %}</a>{% endif %}
+  </section>
+  <section class="ui-card p-4 sm:p-5">
+    <div class="mb-4 flex items-center justify-between gap-3"><div class="flex items-center gap-2"><i data-lucide="qr-code" class="size-5 text-primary"></i><h2 class="font-semibold">{% trans "UPI / Payment gateways" %}</h2></div>{% if user.is_staff %}<a href="{% url 'admin:configuration_paymentgatewayconfig_changelist' %}" hx-boost="false" class="ui-button-outline min-h-9 px-3 py-1.5 text-xs">{% trans "Manage" %}</a>{% endif %}</div>
+    <div class="space-y-2">
+      {% for gateway in payment_gateways %}<div class="rounded-lg border border-border p-3"><div class="flex items-start justify-between gap-3"><div><div class="font-medium">{{ gateway.name }}</div><div class="text-xs text-muted-foreground">{{ gateway.get_provider_display }} · {{ gateway.upi_vpa|default:'UPI VPA not set' }}</div></div><div class="flex gap-1">{% if gateway.is_default %}<span class="ui-badge">{% trans "Default" %}</span>{% endif %}<span class="ui-badge {% if gateway.is_active %}border-primary/30 bg-primary/10 text-primary{% else %}text-muted-foreground{% endif %}">{% if gateway.is_active %}{% trans "Active" %}{% else %}{% trans "Disabled" %}{% endif %}</span></div></div></div>{% empty %}<div class="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">{% trans "No payment gateway is configured. Create one in Django Admin before generating QR payments." %}</div>{% endfor %}
+    </div>
+    <p class="mt-4 text-xs text-muted-foreground">{% trans "API keys and webhook secrets are entered only in Django Admin and are stored encrypted." %}</p>
+  </section>
+</div>
+{% endblock %}

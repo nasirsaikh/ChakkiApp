@@ -1,0 +1,35 @@
+name: Bootstrap migrations
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  migrations:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt
+      - name: Generate initial migrations when absent
+        shell: bash
+        run: |
+          if find apps -path '*/migrations/0*.py' -print -quit | grep -q .; then
+            echo "Initial migrations already exist."
+            exit 0
+          fi
+          python manage.py makemigrations
+          if git diff --quiet -- apps/*/migrations; then
+            echo "No migrations generated."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/*/migrations
+          git commit -m "chore: add initial Django migrations"
+          git push

@@ -1,0 +1,8 @@
+{% load i18n %}<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+<div class="ui-card p-4"><div class="text-xs font-medium text-muted-foreground">{% trans "Today's Grinding" %}</div><div class="mt-1 text-xl font-semibold tracking-tight">{{ grinding_weight|floatformat:2 }} <span class="text-xs font-medium text-muted-foreground">kg</span></div></div>
+<div class="ui-card p-4"><div class="text-xs font-medium text-muted-foreground">{% trans "Net Income Today" %}</div><div class="mt-1 text-xl font-semibold tracking-tight">₹{{ net_income|floatformat:2 }}</div></div>
+<div class="ui-card p-4"><div class="text-xs font-medium text-muted-foreground">{% trans "Expenses Today" %}</div><div class="mt-1 text-xl font-semibold tracking-tight">₹{{ expenses|floatformat:2 }}</div></div>
+<div class="ui-card p-4"><div class="text-xs font-medium text-muted-foreground">{% trans "Active Cash" %}</div><div class="mt-1 text-xl font-semibold tracking-tight">₹{{ cash|floatformat:2 }}</div></div>
+<div class="ui-card p-4"><div class="text-xs font-medium text-muted-foreground">{% trans "Outstanding Udhaar" %}</div><div class="mt-1 text-xl font-semibold tracking-tight">₹{{ udhaar|floatformat:2 }}</div></div>
+<div class="ui-card p-4"><div class="text-xs font-medium text-muted-foreground">{% trans "Pending Jobs" %}</div><div class="mt-1 text-xl font-semibold tracking-tight">{{ pending_jobs }}</div></div>
+</div>

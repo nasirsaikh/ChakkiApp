@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% load i18n %}{% block content %}
+<div class="mx-auto max-w-lg">
+  <div class="ui-card p-5 text-center sm:p-7">
+    <div class="mx-auto mb-3 flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary"><i data-lucide="qr-code" class="size-6"></i></div>
+    <h1 class="text-xl font-semibold tracking-tight">{% trans "Scan to Pay" %}</h1>
+    <p class="mt-1 text-sm text-muted-foreground">{{ order.order_number }} · {{ chakki.currency_symbol|default:'₹' }}{{ payment.amount }}</p>
+    <div class="mx-auto my-5 max-w-[280px] rounded-xl border border-border bg-white p-3 shadow-sm"><img src="{{ qr_data_uri }}" alt="Dynamic UPI QR" class="aspect-square w-full"></div>
+    <div class="mb-4 text-xs text-muted-foreground">{{ gateway.name }} · {{ gateway.upi_vpa }}</div>
+    <div id="payment-state" hx-get="{% url 'operations:payment_status' payment.payment_reference %}" hx-trigger="load, every 3s" hx-swap="innerHTML"></div>
+    <details class="mt-4 rounded-lg border border-border p-3 text-left text-xs text-muted-foreground"><summary class="cursor-pointer font-medium text-foreground">{% trans "Payment reference" %}</summary><code class="mt-2 block break-all rounded-md bg-muted p-2">{{ payment.payment_reference }}</code></details>
+  </div>
+</div>
+{% endblock %}

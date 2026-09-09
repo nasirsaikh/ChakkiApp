@@ -1,0 +1,6 @@
+{% load i18n %}<div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{% for status,label in status_choices %}{% endfor %}
+<div><div class="mb-2 flex items-center justify-between"><h2 class="font-bold">{% trans "Intake" %}</h2></div><div class="space-y-3">{% for order in orders %}{% if order.status == 'INTAKE' %}{% include "operations/_order_card.html" %}{% endif %}{% endfor %}</div></div>
+<div><div class="mb-2"><h2 class="font-bold">{% trans "Grinding" %}</h2></div><div class="space-y-3">{% for order in orders %}{% if order.status == 'GRINDING' %}{% include "operations/_order_card.html" %}{% endif %}{% endfor %}</div></div>
+<div><div class="mb-2"><h2 class="font-bold">{% trans "Ready" %}</h2></div><div class="space-y-3">{% for order in orders %}{% if order.status == 'READY' %}{% include "operations/_order_card.html" %}{% endif %}{% endfor %}</div></div>
+<div><div class="mb-2"><h2 class="font-bold">{% trans "Dispatch / Delivered" %}</h2></div><div class="space-y-3">{% for order in orders %}{% if order.status == 'DISPATCHED' or order.status == 'DELIVERED' %}{% include "operations/_order_card.html" %}{% endif %}{% endfor %}</div></div>
+</div>
