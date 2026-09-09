@@ -1,8 +1,92 @@
 {% extends "base.html" %}{% load i18n %}{% block content %}
-<div class="mb-5 flex flex-wrap items-start justify-between gap-3"><div><h1 class="text-2xl font-semibold tracking-tight">{{ order.order_number }}</h1><p class="mt-1 text-sm text-muted-foreground">{{ order.customer.name }} · {{ order.created_at|date:'d M Y H:i' }}</p></div><span class="ui-badge bg-secondary text-secondary-foreground">{{ order.get_status_display }}</span></div>
-<div class="grid gap-4 lg:grid-cols-3">
-  <section class="ui-card p-4 sm:p-5 lg:col-span-2"><div class="mb-3 flex items-center gap-2"><i data-lucide="wheat" class="size-4 text-primary"></i><h2 class="font-semibold">{% trans "Grinding Details" %}</h2></div><div class="overflow-x-auto"><table class="min-w-full text-sm"><thead class="text-left text-xs text-muted-foreground"><tr><th class="py-2 pr-4">{% trans "Service" %}</th><th class="pr-4">{% trans "Weight" %}</th><th class="pr-4">{% trans "System Rate" %}</th><th class="pr-4">{% trans "Applied Rate" %}</th><th>{% trans "Amount" %}</th></tr></thead><tbody>{% for line in order.lines.all %}<tr class="border-t border-border"><td class="py-3 pr-4">{{ line.get_grain_type_display }} / {{ line.get_flour_type_display }}{% if line.with_jalan %}<div class="text-xs text-amber-700 dark:text-amber-400">{% trans "With Jalan" %}</div>{% endif %}</td><td class="pr-4">{{ line.weight_kg }} kg</td><td class="pr-4">₹{{ line.system_rate_per_kg }}</td><td class="pr-4">₹{{ line.applied_rate_per_kg }}{% if line.rate_override_reason %}<div class="max-w-48 text-xs text-muted-foreground">{{ line.rate_override_reason }}</div>{% endif %}</td><td class="font-medium">₹{{ line.line_total }}</td></tr>{% endfor %}</tbody></table></div></section>
-  <section class="ui-card p-4 sm:p-5"><div class="mb-3 flex items-center gap-2"><i data-lucide="wallet-cards" class="size-4 text-primary"></i><h2 class="font-semibold">{% trans "Bill & Payment" %}</h2></div>{% if invoice %}<dl class="space-y-2 text-sm"><div class="flex justify-between gap-3"><dt>{% trans "Grinding Fee" %}</dt><dd class="font-medium">₹{{ invoice.total_grinding_fee }}</dd></div><div class="flex justify-between gap-3"><dt>{% trans "Paid" %}</dt><dd>₹{{ invoice.paid_amount }}</dd></div><div class="flex justify-between gap-3 text-destructive"><dt>{% trans "Forgiven / Goodwill" %}</dt><dd>₹{{ invoice.forgiven_amount }}</dd></div><div class="flex justify-between gap-3 border-t border-border pt-2 text-base"><dt class="font-semibold">{% trans "Udhaar" %}</dt><dd class="font-semibold">₹{{ invoice.outstanding_amount }}</dd></div></dl>
-  {% if invoice.outstanding_amount > 0 %}{% if has_payment_gateway %}<form method="post" action="{% url 'operations:request_qr_payment' order.pk %}" class="mt-4 space-y-3">{% csrf_token %}{% for f in payment_form %}<div><label class="ui-label mb-1.5 block">{{ f.label }}</label>{{ f }}{% for error in f.errors %}<p class="mt-1 text-xs text-destructive">{{ error }}</p>{% endfor %}</div>{% endfor %}<button class="ui-button-primary w-full"><i data-lucide="qr-code" class="size-4"></i>{% trans "Generate Dynamic QR" %}</button></form>{% else %}<div class="mt-4 rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><div class="font-medium">{% trans "UPI is not configured" %}</div><div class="mt-1 text-xs">{% trans "An Owner/Administrator must activate a payment gateway in Django Admin." %}</div>{% if user.is_staff %}<a href="{% url 'admin:configuration_paymentgatewayconfig_changelist' %}" hx-boost="false" class="mt-2 inline-flex text-xs font-semibold underline">{% trans "Configure gateway" %}</a>{% endif %}</div>{% endif %}{% else %}<div class="mt-4 rounded-lg border border-primary/30 bg-primary/10 p-3 text-center font-medium text-primary"><i data-lucide="circle-check" class="mr-1 inline size-4"></i>{% trans "Paid & Cleared" %}</div>{% endif %}{% endif %}</section>
+{% with line=order.lines.all.0 %}
+<div x-data="{
+  weight:Number('{{ line.weight_kg|default:0 }}'),
+  systemRate:Number('{{ line.system_rate_per_kg|default:0 }}'),
+  rate:Number(document.getElementById('id_applied_rate_per_kg')?.value||'{{ line.applied_rate_per_kg|default:0 }}'),
+  alreadyPaid:Number('{{ invoice.paid_amount|default:0 }}'),
+  alreadyForgiven:Number('{{ invoice.forgiven_amount|default:0 }}'),
+  oldUdhaar:Number('{{ old_udhaar_total|default:0 }}'),
+  currentPay:Number(document.getElementById('id_current_payment_amount')?.value||0),
+  oldPay:Number(document.getElementById('id_old_udhaar_payment_amount')?.value||0),
+  forgive:Number(document.getElementById('id_forgiven_amount')?.value||0),
+  method:document.getElementById('id_payment_method')?.value||'CASH',
+  attaQty:0, attaRate:Number('{{ atta_system_rate|default:0 }}'),
+  khalQty:0, khalRate:Number('{{ khal_system_rate|default:0 }}'),
+  get grindingFee(){return this.weight*this.rate},
+  get currentOutstanding(){return Math.max(0,this.grindingFee-this.alreadyPaid-this.alreadyForgiven)},
+  get currentRemaining(){return Math.max(0,this.currentOutstanding-this.currentPay-this.forgive)},
+  get oldRemaining(){return Math.max(0,this.oldUdhaar-this.oldPay)},
+  get receiveTotal(){return this.currentPay+this.oldPay},
+  get buybackValue(){return (this.attaQty*this.attaRate)+(this.khalQty*this.khalRate)}
+}">
+<div class="mb-5 flex flex-wrap items-start justify-between gap-3">
+  <div><h1 class="text-2xl font-semibold tracking-tight">{{ order.order_number }}</h1><p class="mt-1 text-sm text-muted-foreground">{{ order.customer.name }} · {{ order.created_at|date:'d M Y H:i' }}</p></div>
+  <div class="flex flex-wrap items-center gap-2"><span class="ui-badge bg-secondary text-secondary-foreground">{{ order.get_status_display }}</span>{% if order.status == 'INTAKE' %}<a href="{% url 'operations:grinding_edit' order.pk %}" class="ui-button-outline"><i data-lucide="pencil" class="size-4"></i>{% trans "Edit Intake" %}</a><form method="post" action="{% url 'operations:grinding_delete' order.pk %}" onsubmit="return confirm('Delete/cancel this intake before grinding?');">{% csrf_token %}<button class="ui-button-outline text-destructive"><i data-lucide="trash-2" class="size-4"></i>{% trans "Delete Intake" %}</button></form>{% endif %}</div>
 </div>
+
+<div class="grid gap-4 xl:grid-cols-3">
+  <section class="ui-card p-4 sm:p-5 xl:col-span-2">
+    <div class="mb-3 flex items-center gap-2"><i data-lucide="wheat" class="size-4 text-primary"></i><h2 class="font-semibold">{% trans "Grinding Details" %}</h2></div>
+    <div class="overflow-x-auto"><table class="min-w-full text-sm"><thead class="text-left text-xs text-muted-foreground"><tr><th class="py-2 pr-4">{% trans "Service" %}</th><th class="pr-4">{% trans "Weight" %}</th><th class="pr-4">{% trans "System Rate" %}</th><th class="pr-4">{% trans "Applied Rate" %}</th><th>{% trans "Amount" %}</th></tr></thead><tbody>{% for row in order.lines.all %}<tr class="border-t border-border"><td class="py-3 pr-4">{{ row.get_grain_type_display }} / {{ row.get_flour_type_display }}{% if row.with_jalan %}<div class="text-xs text-amber-700 dark:text-amber-400">{% trans "With Jalan" %}</div>{% endif %}</td><td class="pr-4">{{ row.weight_kg }} kg</td><td class="pr-4">₹{{ row.system_rate_per_kg }}</td><td class="pr-4">₹{{ row.applied_rate_per_kg }}{% if row.rate_override_reason %}<div class="max-w-48 text-xs text-muted-foreground">{{ row.rate_override_reason }}</div>{% endif %}</td><td class="font-medium">₹{{ row.line_total }}</td></tr>{% endfor %}</tbody></table></div>
+  </section>
+
+  <section class="ui-card p-4 sm:p-5">
+    <div class="mb-3 flex items-center gap-2"><i data-lucide="receipt-indian-rupee" class="size-4 text-primary"></i><h2 class="font-semibold">{% trans "Live Balance" %}</h2></div>
+    <dl class="space-y-2 text-sm">
+      <div class="flex justify-between gap-3"><dt>{% trans "Grinding price" %}</dt><dd class="font-semibold">₹<span x-text="grindingFee.toFixed(2)"></span></dd></div>
+      <div class="flex justify-between gap-3"><dt>{% trans "Already paid / adjusted" %}</dt><dd>₹{{ invoice.paid_amount|floatformat:2 }}</dd></div>
+      <div class="flex justify-between gap-3"><dt>{% trans "Already forgiven" %}</dt><dd>₹{{ invoice.forgiven_amount|floatformat:2 }}</dd></div>
+      <div class="flex justify-between gap-3 border-t border-border pt-2"><dt class="font-semibold">{% trans "Current udhaar" %}</dt><dd class="font-semibold text-amber-700">₹<span x-text="currentOutstanding.toFixed(2)"></span></dd></div>
+      <div class="flex justify-between gap-3"><dt>{% trans "All current invoices" %}</dt><dd>₹{{ current_udhaar_total|floatformat:2 }}</dd></div>
+      <div class="flex justify-between gap-3"><dt class="font-semibold">{% trans "Old udhaar" %}</dt><dd class="font-semibold text-destructive">₹{{ old_udhaar_total|floatformat:2 }}</dd></div>
+    </dl>
+    {% if old_udhaar_records %}<details class="mt-3 rounded-lg border border-border p-3"><summary class="cursor-pointer text-sm font-semibold">{% trans "Show old udhaar list" %}</summary><div class="mt-2 space-y-2">{% for old in old_udhaar_records %}<div class="flex justify-between gap-2 border-t border-border pt-2 text-xs"><span>{{ old.opening_date|date:'d M Y' }}{% if old.note %} · {{ old.note }}{% endif %}</span><span class="font-semibold">₹{{ old.outstanding_amount|floatformat:2 }}</span></div>{% endfor %}</div></details>{% endif %}
+  </section>
+</div>
+
+{% if invoice and invoice.status != 'VOID' %}
+<section class="ui-card mt-4 p-4 sm:p-5">
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-2"><div><h2 class="font-semibold">{% trans "Bill Payment & Adjustment" %}</h2><p class="text-xs text-muted-foreground">{% trans "Change the final rate, accept cash/UPI, forgive an amount, and adjust old udhaar from one screen." %}</p></div><span class="ui-badge bg-primary/10 text-primary">{{ invoice.get_status_display }}</span></div>
+  <form method="post" action="{% url 'operations:settle_bill' order.pk %}" class="space-y-4">{% csrf_token %}
+    {% if settlement_form.non_field_errors %}<div class="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{{ settlement_form.non_field_errors }}</div>{% endif %}
+    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div><label class="ui-label mb-1.5 block">{{ settlement_form.applied_rate_per_kg.label }}</label><div @input="rate=Number($event.target.value||0)">{{ settlement_form.applied_rate_per_kg }}</div><p class="mt-1 text-xs text-muted-foreground">{% trans "System" %}: ₹{{ line.system_rate_per_kg }}/kg</p>{% for e in settlement_form.applied_rate_per_kg.errors %}<p class="mt-1 text-xs text-destructive">{{ e }}</p>{% endfor %}</div>
+      <div><label class="ui-label mb-1.5 block">{{ settlement_form.rate_override_reason.label }}</label>{{ settlement_form.rate_override_reason }}{% for e in settlement_form.rate_override_reason.errors %}<p class="mt-1 text-xs text-destructive">{{ e }}</p>{% endfor %}</div>
+      <div><label class="ui-label mb-1.5 block">{{ settlement_form.forgiven_amount.label }}</label><div @input="forgive=Number($event.target.value||0)">{{ settlement_form.forgiven_amount }}</div>{% for e in settlement_form.forgiven_amount.errors %}<p class="mt-1 text-xs text-destructive">{{ e }}</p>{% endfor %}</div>
+      <div><label class="ui-label mb-1.5 block">{{ settlement_form.payment_method.label }}</label><div @change="method=$event.target.value">{{ settlement_form.payment_method }}</div></div>
+      <div><label class="ui-label mb-1.5 block">{{ settlement_form.current_payment_amount.label }}</label><div @input="currentPay=Number($event.target.value||0)">{{ settlement_form.current_payment_amount }}</div>{% for e in settlement_form.current_payment_amount.errors %}<p class="mt-1 text-xs text-destructive">{{ e }}</p>{% endfor %}</div>
+      <div><label class="ui-label mb-1.5 block">{{ settlement_form.old_udhaar_payment_amount.label }}</label><div @input="oldPay=Number($event.target.value||0)">{{ settlement_form.old_udhaar_payment_amount }}</div><p class="mt-1 text-xs text-muted-foreground">{% trans "Available old udhaar" %}: ₹{{ old_udhaar_total|floatformat:2 }}</p>{% for e in settlement_form.old_udhaar_payment_amount.errors %}<p class="mt-1 text-xs text-destructive">{{ e }}</p>{% endfor %}</div>
+      <div x-show="method==='QR'" x-cloak><label class="ui-label mb-1.5 block">{{ settlement_form.provider.label }}</label>{{ settlement_form.provider }}{% if not has_payment_gateway %}<p class="mt-1 text-xs text-destructive">{% trans "Configure an active UPI gateway in Django Admin." %}</p>{% endif %}{% for e in settlement_form.provider.errors %}<p class="mt-1 text-xs text-destructive">{{ e }}</p>{% endfor %}</div>
+      <div><label class="ui-label mb-1.5 block">{{ settlement_form.notes.label }}</label>{{ settlement_form.notes }}</div>
+    </div>
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="rounded-xl bg-muted p-3"><div class="text-xs text-muted-foreground">{% trans "Revised grinding fee" %}</div><div class="text-lg font-bold">₹<span x-text="grindingFee.toFixed(2)"></span></div></div>
+      <div class="rounded-xl bg-muted p-3"><div class="text-xs text-muted-foreground">{% trans "Receive now" %}</div><div class="text-lg font-bold text-primary">₹<span x-text="receiveTotal.toFixed(2)"></span></div></div>
+      <div class="rounded-xl bg-muted p-3"><div class="text-xs text-muted-foreground">{% trans "Current remaining after this" %}</div><div class="text-lg font-bold">₹<span x-text="currentRemaining.toFixed(2)"></span></div></div>
+      <div class="rounded-xl bg-muted p-3"><div class="text-xs text-muted-foreground">{% trans "Old remaining after this" %}</div><div class="text-lg font-bold">₹<span x-text="oldRemaining.toFixed(2)"></span></div></div>
+    </div>
+    <button class="ui-button-primary w-full sm:w-auto"><i data-lucide="indian-rupee" class="size-4"></i><span x-text="method==='QR' ? '{% trans "Generate QR & Allocate" %}' : '{% trans "Receive Cash & Allocate" %}'"></span></button>
+  </form>
+</section>
+{% endif %}
+
+{% if buyback_has_atta or buyback_has_khal %}
+<section class="ui-card mt-4 p-4 sm:p-5">
+  <div class="mb-4"><h2 class="font-semibold">{% trans "Buyback from this order" %}</h2><p class="text-xs text-muted-foreground">{% trans "Wheat automatically enables Atta; oil extraction enables Khal. If both apply you can buy back both and choose where the value is adjusted." %}</p></div>
+  <form method="post" action="{% url 'operations:order_buyback' order.pk %}" class="space-y-4">{% csrf_token %}
+    {% if buyback_form.non_field_errors %}<div class="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{{ buyback_form.non_field_errors }}</div>{% endif %}
+    <div class="grid gap-4 lg:grid-cols-2">
+      {% if buyback_has_atta %}<div class="rounded-xl border border-border p-4"><div class="mb-3 flex items-center justify-between"><h3 class="font-semibold">{% trans "Atta Buyback" %}</h3><span class="text-xs text-muted-foreground">{% trans "System rate" %} ₹{{ atta_system_rate }}/kg</span></div><div class="grid gap-3 sm:grid-cols-2"><div><label class="ui-label mb-1 block">{{ buyback_form.atta_inventory_item.label }}</label>{{ buyback_form.atta_inventory_item }}</div><div><label class="ui-label mb-1 block">{{ buyback_form.atta_quantity_kg.label }}</label><div @input="attaQty=Number($event.target.value||0)">{{ buyback_form.atta_quantity_kg }}</div></div><div><label class="ui-label mb-1 block">{{ buyback_form.atta_rate_per_kg.label }}</label><div @input="attaRate=Number($event.target.value||0)">{{ buyback_form.atta_rate_per_kg }}</div></div><div><label class="ui-label mb-1 block">{{ buyback_form.atta_override_reason.label }}</label>{{ buyback_form.atta_override_reason }}</div></div>{% for field in buyback_form %}{% if field.name|slice:':5' == 'atta_' %}{% for e in field.errors %}<p class="mt-1 text-xs text-destructive">{{ e }}</p>{% endfor %}{% endif %}{% endfor %}</div>{% endif %}
+      {% if buyback_has_khal %}<div class="rounded-xl border border-border p-4"><div class="mb-3 flex items-center justify-between"><h3 class="font-semibold">{% trans "Khal Buyback" %}</h3><span class="text-xs text-muted-foreground">{% trans "System rate" %} ₹{{ khal_system_rate }}/kg</span></div><div class="grid gap-3 sm:grid-cols-2"><div><label class="ui-label mb-1 block">{{ buyback_form.khal_inventory_item.label }}</label>{{ buyback_form.khal_inventory_item }}</div><div><label class="ui-label mb-1 block">{{ buyback_form.khal_quantity_kg.label }}</label><div @input="khalQty=Number($event.target.value||0)">{{ buyback_form.khal_quantity_kg }}</div></div><div><label class="ui-label mb-1 block">{{ buyback_form.khal_rate_per_kg.label }}</label><div @input="khalRate=Number($event.target.value||0)">{{ buyback_form.khal_rate_per_kg }}</div></div><div><label class="ui-label mb-1 block">{{ buyback_form.khal_override_reason.label }}</label>{{ buyback_form.khal_override_reason }}</div></div>{% for field in buyback_form %}{% if field.name|slice:':5' == 'khal_' %}{% for e in field.errors %}<p class="mt-1 text-xs text-destructive">{{ e }}</p>{% endfor %}{% endif %}{% endfor %}</div>{% endif %}
+    </div>
+    <div class="grid gap-4 sm:grid-cols-[1fr_auto]"><div><label class="ui-label mb-1.5 block">{{ buyback_form.adjustment_target.label }}</label>{{ buyback_form.adjustment_target }}<p class="mt-1 text-xs text-muted-foreground">{% trans "Auto uses current bill first, then old udhaar, then pays any excess in cash." %}</p></div><div class="rounded-xl bg-primary/10 p-4 sm:min-w-52"><div class="text-xs text-muted-foreground">{% trans "Live buyback value" %}</div><div class="text-xl font-bold text-primary">₹<span x-text="buybackValue.toFixed(2)"></span></div></div></div>
+    <div><label class="ui-label mb-1.5 block">{{ buyback_form.notes.label }}</label>{{ buyback_form.notes }}</div>
+    <button class="ui-button-primary w-full sm:w-auto"><i data-lucide="repeat-2" class="size-4"></i>{% trans "Post Buyback & Adjust Balance" %}</button>
+  </form>
+  {% if order.buybacks.all %}<div class="mt-5 border-t border-border pt-4"><h3 class="mb-2 text-sm font-semibold">{% trans "Buybacks on this order" %}</h3><div class="space-y-2">{% for tx in order.buybacks.all %}<div class="rounded-lg bg-muted p-3 text-sm"><div class="flex justify-between gap-3"><span class="font-medium">{{ tx.reference }}</span><span>₹{{ tx.buyback_value|floatformat:2 }}</span></div><div class="mt-1 text-xs text-muted-foreground">{% trans "Current" %} ₹{{ tx.adjusted_current_amount|floatformat:2 }} · {% trans "Old" %} ₹{{ tx.adjusted_old_amount|floatformat:2 }} · {% trans "Cash" %} ₹{{ tx.cash_paid_amount|floatformat:2 }}</div></div>{% endfor %}</div></div>{% endif %}
+</section>
+{% endif %}
+</div>
+{% endwith %}
 {% endblock %}
