@@ -10,6 +10,7 @@ from apps.core.models import TimeStampedModel
 
 MONEY = Decimal("0.01")
 
+
 class RateCard(TimeStampedModel):
     class GrainType(models.TextChoices):
         WHEAT = "WHEAT", "Wheat"
@@ -47,6 +48,7 @@ class RateCard(TimeStampedModel):
     def __str__(self) -> str:
         jalan = "with Jalan" if self.with_jalan else "without Jalan"
         return f"{self.get_grain_type_display()} / {self.get_flour_type_display()} ({jalan}) ₹{self.system_rate_per_kg}/kg"
+
 
 class GrindingOrder(TimeStampedModel):
     class Status(models.TextChoices):
@@ -92,6 +94,7 @@ class GrindingOrder(TimeStampedModel):
     def __str__(self) -> str:
         return self.order_number
 
+
 class GrindingOrderLine(TimeStampedModel):
     order = models.ForeignKey(GrindingOrder, on_delete=models.CASCADE, related_name="lines", verbose_name="Grinding order")
     rate_card = models.ForeignKey(RateCard, on_delete=models.PROTECT, related_name="order_lines", verbose_name="Rate card")
@@ -127,6 +130,7 @@ class GrindingOrderLine(TimeStampedModel):
     def __str__(self) -> str:
         return f"{self.order.order_number} - {self.weight_kg}kg"
 
+
 class OrderStatusEvent(TimeStampedModel):
     order = models.ForeignKey(GrindingOrder, on_delete=models.CASCADE, related_name="status_events")
     from_status = models.CharField(max_length=20, choices=GrindingOrder.Status.choices, blank=True)
@@ -136,6 +140,7 @@ class OrderStatusEvent(TimeStampedModel):
 
     class Meta:
         ordering = ["created_at"]
+
 
 class Invoice(TimeStampedModel):
     class Status(models.TextChoices):
@@ -164,12 +169,13 @@ class Invoice(TimeStampedModel):
 
     def save(self, *args, **kwargs) -> None:
         self.outstanding_amount = (self.total_grinding_fee - self.paid_amount - self.forgiven_amount).quantize(MONEY)
-        if self.outstanding_amount == 0:
-            self.status = self.Status.PAID
-        elif self.paid_amount > 0:
-            self.status = self.Status.PARTIAL
-        elif self.status != self.Status.VOID:
-            self.status = self.Status.OPEN
+        if self.status != self.Status.VOID:
+            if self.outstanding_amount == 0:
+                self.status = self.Status.PAID
+            elif self.paid_amount > 0 or self.forgiven_amount > 0:
+                self.status = self.Status.PARTIAL
+            else:
+                self.status = self.Status.OPEN
         self.full_clean()
         if not self.invoice_number:
             self.invoice_number = f"INV-{timezone.localdate():%y%m%d}-{uuid.uuid4().hex[:6].upper()}"
@@ -178,12 +184,14 @@ class Invoice(TimeStampedModel):
     def __str__(self) -> str:
         return self.invoice_number
 
+
 class OrderPayment(TimeStampedModel):
     class PaymentMethod(models.TextChoices):
         CASH = "CASH", "Cash"
         QR = "QR", "Dynamic QR / UPI"
         CREDIT = "CREDIT", "Credit / Udhaar"
         BANK = "BANK", "Bank"
+
     class SettlementStatus(models.TextChoices):
         PENDING = "PENDING", "Pending"
         SETTLED = "SETTLED", "Settled"
@@ -194,16 +202,11 @@ class OrderPayment(TimeStampedModel):
     payment_method = models.CharField(max_length=12, choices=PaymentMethod.choices, default=PaymentMethod.QR, verbose_name="Payment method")
     payment_reference = models.CharField(max_length=100, unique=True, db_index=True, verbose_name="Payment reference")
     amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))], verbose_name="Payment amount")
+    current_invoice_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(Decimal("0.00"))], verbose_name="Current invoice allocation")
+    old_udhaar_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(Decimal("0.00"))], verbose_name="Old udhaar allocation")
     settlement_status = models.CharField(max_length=12, choices=SettlementStatus.choices, default=SettlementStatus.PENDING, db_index=True, verbose_name="Settlement status")
     provider = models.CharField(max_length=80, blank=True, verbose_name="Payment provider snapshot")
-    payment_gateway = models.ForeignKey(
-        "configuration.PaymentGatewayConfig",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="order_payments",
-        verbose_name="Payment / UPI gateway",
-    )
+    payment_gateway = models.ForeignKey("configuration.PaymentGatewayConfig", on_delete=models.PROTECT, null=True, blank=True, related_name="order_payments", verbose_name="Payment / UPI gateway")
     provider_payload = models.JSONField(default=dict, blank=True, verbose_name="Provider payload")
     settled_at = models.DateTimeField(null=True, blank=True, verbose_name="Settled at")
     journal_entry = models.OneToOneField("accounting.JournalEntry", on_delete=models.PROTECT, null=True, blank=True, related_name="order_payment")
@@ -211,21 +214,40 @@ class OrderPayment(TimeStampedModel):
     class Meta:
         ordering = ["-created_at"]
 
+    def clean(self) -> None:
+        allocations = (self.current_invoice_amount or Decimal("0.00")) + (self.old_udhaar_amount or Decimal("0.00"))
+        if allocations > 0 and allocations != self.amount:
+            raise ValidationError("Current invoice allocation plus old udhaar allocation must equal the payment amount.")
+
     def save(self, *args, **kwargs) -> None:
+        if not self.pk and self.current_invoice_amount == 0 and self.old_udhaar_amount == 0 and self.amount:
+            self.current_invoice_amount = self.amount
         if self.settlement_status == self.SettlementStatus.SETTLED and self.settled_at is None:
             self.settled_at = timezone.now()
+        self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return self.payment_reference
 
+
 class BuybackTransaction(TimeStampedModel):
+    class AdjustmentTarget(models.TextChoices):
+        AUTO = "AUTO", "Current bill, then old udhaar, then cash"
+        CURRENT = "CURRENT", "Current grinding bill / udhaar"
+        OLD = "OLD", "Old udhaar"
+        CASH = "CASH", "Cash payout"
+
     customer = models.ForeignKey("customers.Customer", on_delete=models.PROTECT, related_name="buybacks", verbose_name="Customer")
     order = models.ForeignKey(GrindingOrder, on_delete=models.PROTECT, null=True, blank=True, related_name="buybacks", verbose_name="Related order")
     reference = models.CharField(max_length=24, unique=True, blank=True, verbose_name="Buyback reference")
     processing_fee = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Processing / extraction fee")
     buyback_value = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Products bought back value")
     net_customer_payable = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Net amount payable to customer")
+    adjustment_target = models.CharField(max_length=12, choices=AdjustmentTarget.choices, default=AdjustmentTarget.CASH, verbose_name="Buyback adjustment target")
+    adjusted_current_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Adjusted against current bill")
+    adjusted_old_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Adjusted against old udhaar")
+    cash_paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Cash paid to customer")
     journal_entry = models.OneToOneField("accounting.JournalEntry", on_delete=models.PROTECT, null=True, blank=True, related_name="buyback")
     notes = models.CharField(max_length=255, blank=True, verbose_name="Notes")
 
@@ -243,6 +265,7 @@ class BuybackTransaction(TimeStampedModel):
 
     def __str__(self) -> str:
         return self.reference
+
 
 class BuybackLine(TimeStampedModel):
     class ProductType(models.TextChoices):
@@ -270,6 +293,7 @@ class BuybackLine(TimeStampedModel):
         self.full_clean()
         super().save(*args, **kwargs)
 
+
 class ProductionLog(TimeStampedModel):
     production_date = models.DateField(default=timezone.localdate, db_index=True, verbose_name="Production date")
     product_name = models.CharField(max_length=120, verbose_name="Product")
@@ -288,6 +312,7 @@ class ProductionLog(TimeStampedModel):
     def yield_percent(self) -> Decimal:
         return ((self.output_weight_kg / self.input_weight_kg) * 100).quantize(Decimal("0.01")) if self.input_weight_kg else Decimal("0")
 
+
 class WastageLog(TimeStampedModel):
     wastage_date = models.DateField(default=timezone.localdate, db_index=True, verbose_name="Wastage date")
     process = models.CharField(max_length=120, verbose_name="Process")
@@ -301,12 +326,14 @@ class WastageLog(TimeStampedModel):
     def total_waste_kg(self) -> Decimal:
         return self.milling_loss_kg + self.dust_kg + self.other_waste_kg
 
+
 class UtilityLedger(TimeStampedModel):
     class UtilityType(models.TextChoices):
         ELECTRICITY = "ELECTRICITY", "Electricity"
         DIESEL = "DIESEL", "Diesel / Fuel"
         WATER = "WATER", "Water"
         OTHER = "OTHER", "Other overhead"
+
     period = models.DateField(default=timezone.localdate, db_index=True, verbose_name="Billing / usage date")
     utility_type = models.CharField(max_length=20, choices=UtilityType.choices, verbose_name="Utility type")
     units = models.DecimalField(max_digits=12, decimal_places=3, default=0, verbose_name="Units / quantity")
