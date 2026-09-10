@@ -106,9 +106,7 @@ def allocate_old_udhaar(customer, amount: Decimal) -> Decimal:
         old_record.settled_amount += allocation
         old_record.save(update_fields=["settled_amount", "updated_at"])
         remaining -= allocation
-    if remaining > 0:
-        raise ValidationError("Old udhaar allocation exceeds the customer's outstanding old balance.")
-    return requested
+    return requested - remaining
 
 
 @transaction.atomic
