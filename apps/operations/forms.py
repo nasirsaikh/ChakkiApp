@@ -52,16 +52,20 @@ class GrindingIntakeForm(forms.Form):
         self.order = order
         super().__init__(*args, **kwargs)
         self.fields["rate_card"].queryset = RateCard.objects.filter(is_active=True).order_by("grain_type", "flour_type", "with_jalan")
-        if order is not None and not self.is_bound:
-            line = order.lines.select_related("rate_card").first()
-            self.initial.update({"customer": order.customer_id, "notes": order.notes})
-            if line:
-                self.initial.update({
-                    "rate_card": line.rate_card_id,
-                    "weight_kg": line.weight_kg,
-                    "applied_rate_per_kg": line.applied_rate_per_kg,
-                    "rate_override_reason": line.rate_override_reason,
-                })
+        if order is not None:
+            self.initial["customer"] = order.customer_id
+            self.fields["customer"].disabled = True
+            self.fields["customer"].help_text = "Customer is locked after the intake invoice is created. If the wrong customer was selected, delete/cancel this Intake and create it again so the customer ledger stays correct."
+            if not self.is_bound:
+                line = order.lines.select_related("rate_card").first()
+                self.initial["notes"] = order.notes
+                if line:
+                    self.initial.update({
+                        "rate_card": line.rate_card_id,
+                        "weight_kg": line.weight_kg,
+                        "applied_rate_per_kg": line.applied_rate_per_kg,
+                        "rate_override_reason": line.rate_override_reason,
+                    })
         for field in self.fields.values():
             field.widget.attrs["class"] = BASE
 
@@ -91,9 +95,8 @@ class GrindingIntakeForm(forms.Form):
             line = GrindingOrderLine(order=order)
         else:
             order = GrindingOrder.objects.select_for_update().get(pk=self.order.pk)
-            order.customer = data["customer"]
             order.notes = data["notes"]
-            order.save(update_fields=["customer", "notes", "updated_at"])
+            order.save(update_fields=["notes", "updated_at"])
             line = order.lines.select_for_update().first() or GrindingOrderLine(order=order)
         line.rate_card = card
         line.grain_type = card.grain_type
@@ -251,8 +254,14 @@ class OrderBuybackForm(forms.Form):
         self.fields["atta_inventory_item"].queryset = atta_items
         self.fields["khal_inventory_item"].queryset = khal_items
         rates = ChakkiSettings.load().buyback_rates or {}
-        self.atta_system_rate = Decimal(str(rates.get("ATTA", "0") or "0")).quantize(Decimal("0.01"))
-        self.khal_system_rate = Decimal(str(rates.get("KHAL", "0") or "0")).quantize(Decimal("0.01"))
+        try:
+            self.atta_system_rate = Decimal(str(rates.get("ATTA", "0") or "0")).quantize(Decimal("0.01"))
+        except Exception:
+            self.atta_system_rate = Decimal("0.00")
+        try:
+            self.khal_system_rate = Decimal(str(rates.get("KHAL", "0") or "0")).quantize(Decimal("0.01"))
+        except Exception:
+            self.khal_system_rate = Decimal("0.00")
         if not self.is_bound:
             if self.has_atta:
                 self.initial.update({"atta_inventory_item": atta_items.first(), "atta_rate_per_kg": self.atta_system_rate})
@@ -275,7 +284,9 @@ class OrderBuybackForm(forms.Form):
                 rate = data.get(f"{prefix}_rate_per_kg")
                 if rate is None or rate <= 0:
                     self.add_error(f"{prefix}_rate_per_kg", "Enter a positive buyback rate.")
-                elif system_rate > 0 and rate != system_rate and not (data.get(f"{prefix}_override_reason") or "").strip():
+                elif system_rate <= 0:
+                    self.add_error(f"{prefix}_rate_per_kg", f"Configure a positive {prefix.title()} buyback system rate in Django Admin.")
+                elif rate != system_rate and not (data.get(f"{prefix}_override_reason") or "").strip():
                     self.add_error(f"{prefix}_override_reason", "Enter a reason for changing the system buyback rate.")
         if not any_line:
             raise forms.ValidationError("Enter Atta and/or Khal quantity to buy back.")
