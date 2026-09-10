@@ -5,4 +5,5 @@ gunicorn>=23,<24
 python-dotenv>=1.1,<2
 qrcode[pil]>=8.2,<9
 cryptography>=46,<47
+setuptools>=70,<81
 razorpay>=1.4,<2
