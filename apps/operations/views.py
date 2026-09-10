@@ -25,6 +25,7 @@ from apps.configuration.models import ChakkiSettings, PaymentGatewayConfig
 from apps.core.rbac import module_required
 from .forms import BillSettlementForm, BuybackForm, GrindingIntakeForm, OrderBuybackForm, PaymentRequestForm, ProductionLogForm, RateCardForm, UtilityLedgerForm, WastageLogForm
 from .models import BuybackTransaction, GrindingOrder, Invoice, OrderPayment, ProductionLog, RateCard, UtilityLedger, WastageLog
+from .payment_gateways.razorpay_checkout import render_razorpay_checkout
 from .services import add_invoice_forgiveness, change_order_status, finalize_invoice, post_buyback, post_utility_cost, revise_invoice_total, settle_order_payment, void_intake_order
 
 
@@ -65,6 +66,17 @@ def _payment_qr_response(request: HttpRequest, order: GrindingOrder, payment: Or
     }
     upi_payload = "upi://pay?" + urlencode(params)
     return render(request, "operations/payment_qr.html", {"payment": payment, "order": order, "gateway": gateway, "qr_data_uri": _qr_data_uri(upi_payload), "upi_payload": upi_payload})
+
+
+def _payment_gateway_response(request: HttpRequest, order: GrindingOrder, payment: OrderPayment, gateway: PaymentGatewayConfig) -> HttpResponse:
+    if gateway.provider == PaymentGatewayConfig.Provider.RAZORPAY:
+        try:
+            return render_razorpay_checkout(request, order, payment, gateway)
+        except Exception:
+            payment.delete()
+            messages.error(request, "Razorpay order creation failed. Check the Test/Live API keys and gateway configuration in Django Admin.")
+            return redirect("operations:order_detail", pk=order.pk)
+    return _payment_qr_response(request, order, payment, gateway)
 
 
 @module_required("grinding")
@@ -194,11 +206,11 @@ def settle_bill(request: HttpRequest, pk: int) -> HttpResponse:
             settle_order_payment(payment, provider_payload={"source": "cash-counter", "notes": data.get("notes", "")}, created_by=request.user, close_order=False)
             messages.success(request, f"Cash ₹{total_amount:.2f} received and allocated successfully.")
             return redirect("operations:order_detail", pk=pk)
-        if not gateway or not gateway.is_active or not gateway.upi_vpa:
+        if not gateway or not gateway.is_ready_for_payment:
             payment.delete()
-            messages.error(request, "The selected UPI gateway is not ready. Configure it in Django Admin.")
+            messages.error(request, "The selected payment gateway is not ready. Configure its required credentials in Django Admin.")
             return redirect("operations:order_detail", pk=pk)
-    return _payment_qr_response(request, order, payment, gateway)
+    return _payment_gateway_response(request, order, payment, gateway)
 
 
 @module_required("grinding")
@@ -245,13 +257,13 @@ def request_qr_payment(request: HttpRequest, pk: int) -> HttpResponse:
     amount = form.cleaned_data["amount"]
     gateway: PaymentGatewayConfig = form.cleaned_data["provider"]
     if amount > invoice.outstanding_amount:
-        messages.error(request, "QR amount cannot exceed the invoice outstanding balance.")
+        messages.error(request, "Payment amount cannot exceed the invoice outstanding balance.")
         return redirect("operations:order_detail", pk=pk)
-    if not gateway.is_active or not gateway.upi_vpa:
+    if not gateway.is_ready_for_payment:
         messages.error(request, "The selected payment gateway is not ready. Configure it in Django Admin.")
         return redirect("operations:order_detail", pk=pk)
     payment = OrderPayment.objects.create(order=order, invoice=invoice, payment_method=OrderPayment.PaymentMethod.QR, payment_reference=f"QR-{uuid.uuid4().hex.upper()}", amount=amount, current_invoice_amount=amount, provider=gateway.name, payment_gateway=gateway)
-    return _payment_qr_response(request, order, payment, gateway)
+    return _payment_gateway_response(request, order, payment, gateway)
 
 
 @module_required("grinding")
