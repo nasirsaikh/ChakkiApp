@@ -136,9 +136,9 @@ def void_intake_order(order: GrindingOrder, created_by=None) -> GrindingOrder:
             ],
             source_type="grinding_invoice_void", source_id=invoice.pk, created_by=created_by,
         )
+        Invoice.objects.filter(pk=invoice.pk).update(status=Invoice.Status.VOID, outstanding_amount=Decimal("0.00"), updated_at=timezone.now())
         invoice.status = Invoice.Status.VOID
         invoice.outstanding_amount = Decimal("0.00")
-        invoice.save(update_fields=["status", "outstanding_amount", "updated_at"])
     old = order.status
     order.status = GrindingOrder.Status.CANCELLED
     order.save(update_fields=["status", "updated_at"])
@@ -169,7 +169,9 @@ def settle_order_payment(payment: OrderPayment, provider_payload: dict | None = 
         ],
     )
     if old_amount > 0:
-        allocate_old_udhaar(payment.order.customer, old_amount)
+        allocated = allocate_old_udhaar(payment.order.customer, old_amount)
+        if allocated != old_amount:
+            raise ValidationError("Old udhaar allocation could not be completed.")
     payment.settlement_status = OrderPayment.SettlementStatus.SETTLED
     payment.provider_payload = provider_payload or payment.provider_payload
     payment.journal_entry = journal
@@ -280,7 +282,9 @@ def post_buyback(transaction_obj: BuybackTransaction, created_by=None) -> Buybac
             invoice.paid_amount += current_adjust
             invoice.save()
         if old_adjust > 0:
-            allocate_old_udhaar(transaction_obj.customer, old_adjust)
+            allocated = allocate_old_udhaar(transaction_obj.customer, old_adjust)
+            if allocated != old_adjust:
+                raise ValidationError("Buyback could not fully adjust the selected old udhaar amount.")
         transaction_obj.adjusted_current_amount = current_adjust
         transaction_obj.adjusted_old_amount = old_adjust
         transaction_obj.cash_paid_amount = cash_pay
