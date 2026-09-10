@@ -8,6 +8,8 @@ from .models import Account, CustomerReceipt, JournalEntry, LedgerEntry, OldUdha
 
 SYSTEM_ACCOUNTS = {
     "CASH": ("1000", "Cash Book", Account.AccountType.ASSET),
+    "BANK": ("1010", "Bank Account", Account.AccountType.ASSET),
+    "RAZORPAY_CLEARING": ("1020", "Razorpay Clearing", Account.AccountType.ASSET),
     "AR": ("1100", "Accounts Receivable (Udhaar)", Account.AccountType.ASSET),
     "INVENTORY": ("1200", "Inventory Asset", Account.AccountType.ASSET),
     "AP": ("2000", "Accounts Payable (Suppliers)", Account.AccountType.LIABILITY),
@@ -20,6 +22,7 @@ SYSTEM_ACCOUNTS = {
     "UTILITY_EXPENSE": ("5200", "Utility Expense", Account.AccountType.EXPENSE),
     "WAGE_EXPENSE": ("5300", "Wage and Payroll Expense", Account.AccountType.EXPENSE),
     "MAINTENANCE_EXPENSE": ("5400", "Maintenance Expense", Account.AccountType.EXPENSE),
+    "PAYMENT_GATEWAY_FEES": ("5500", "Payment Gateway Charges", Account.AccountType.EXPENSE),
     "GENERAL_EXPENSE": ("5900", "General Operating Expense", Account.AccountType.EXPENSE),
 }
 

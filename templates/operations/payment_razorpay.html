@@ -1,0 +1,70 @@
+{% extends "base.html" %}{% load i18n %}{% block content %}
+<div class="mx-auto max-w-lg">
+  <div class="ui-card p-5 text-center sm:p-7">
+    <div class="mx-auto mb-3 flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary"><i data-lucide="credit-card" class="size-6"></i></div>
+    <h1 class="text-xl font-semibold tracking-tight">{% trans "Pay securely with Razorpay" %}</h1>
+    <p class="mt-1 text-sm text-muted-foreground">{{ order.order_number }} · ₹{{ payment.amount }}</p>
+    <div class="mt-5 rounded-lg border border-border p-4 text-left text-sm">
+      <div class="flex justify-between"><span>{% trans "Gateway" %}</span><span class="font-medium">{{ gateway.name }}</span></div>
+      <div class="mt-2 flex justify-between"><span>{% trans "Mode" %}</span><span class="font-medium">{{ gateway.get_environment_display }}</span></div>
+      <div class="mt-2 flex justify-between"><span>{% trans "Reference" %}</span><span class="font-mono text-xs">{{ payment.payment_reference }}</span></div>
+    </div>
+    <button id="rzp-pay-button" class="ui-button-primary mt-5 w-full">{% trans "Pay now" %}</button>
+    <p id="rzp-message" class="mt-3 text-sm text-muted-foreground"></p>
+  </div>
+</div>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+(function () {
+  const button = document.getElementById('rzp-pay-button');
+  const message = document.getElementById('rzp-message');
+  const options = {
+    key: "{{ gateway.key_id|escapejs }}",
+    amount: "{{ razorpay_order.amount }}",
+    currency: "{{ razorpay_order.currency|escapejs }}",
+    name: "{{ merchant_name|escapejs }}",
+    description: "{{ payment.payment_reference|escapejs }}",
+    order_id: "{{ razorpay_order.id|escapejs }}",
+    prefill: {
+      name: "{{ order.customer.name|escapejs }}",
+      contact: "{{ order.customer.phone|escapejs }}"
+    },
+    notes: {
+      payment_reference: "{{ payment.payment_reference|escapejs }}"
+    },
+    handler: async function (response) {
+      button.disabled = true;
+      message.textContent = "Verifying payment...";
+      const body = new URLSearchParams({
+        payment_reference: "{{ payment.payment_reference|escapejs }}",
+        razorpay_order_id: response.razorpay_order_id,
+        razorpay_payment_id: response.razorpay_payment_id,
+        razorpay_signature: response.razorpay_signature,
+        csrfmiddlewaretoken: "{{ csrf_token }}"
+      });
+      const verifyResponse = await fetch("{% url 'operations:razorpay_verify' %}", {
+        method: "POST",
+        headers: {"Content-Type": "application/x-www-form-urlencoded", "X-CSRFToken": "{{ csrf_token }}"},
+        body: body.toString()
+      });
+      const result = await verifyResponse.json();
+      if (verifyResponse.ok && result.ok) {
+        message.textContent = "Payment verified successfully.";
+        window.location.href = "{% url 'operations:order_detail' order.pk %}";
+      } else {
+        button.disabled = false;
+        message.textContent = result.error || "Payment verification failed.";
+      }
+    },
+    modal: {
+      ondismiss: function () {
+        message.textContent = "Payment was not completed.";
+      }
+    },
+    theme: {color: "#15803d"}
+  };
+  const checkout = new Razorpay(options);
+  button.addEventListener('click', function () { checkout.open(); });
+})();
+</script>
+{% endblock %}

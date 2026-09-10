@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import os
 
 from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
@@ -9,8 +10,10 @@ from django.core.exceptions import ImproperlyConfigured
 
 
 def _fernet() -> Fernet:
-    secret_key = str(settings.SECRET_KEY).encode("utf-8")
-    digest = hashlib.sha256(secret_key).digest()
+    # Keep SECRET_KEY as a backward-compatible fallback so existing encrypted
+    # gateway credentials remain readable until PAYMENT_ENCRYPTION_KEY is set.
+    encryption_key = os.getenv("PAYMENT_ENCRYPTION_KEY") or str(settings.SECRET_KEY)
+    digest = hashlib.sha256(encryption_key.encode("utf-8")).digest()
     return Fernet(base64.urlsafe_b64encode(digest))
 
 
