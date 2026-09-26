@@ -60,11 +60,16 @@ class PaymentGatewayConfig(TimeStampedModel):
         BHARATPE = "BHARATPE", "BharatPe"
         CUSTOM = "CUSTOM", "Custom Bank / UPI Provider"
 
+    class Environment(models.TextChoices):
+        TEST = "TEST", "Test"
+        LIVE = "LIVE", "Live"
+
     class SignatureAlgorithm(models.TextChoices):
         HMAC_SHA256 = "HMAC_SHA256", "HMAC SHA-256 (hex digest)"
 
     name = models.CharField(max_length=80, unique=True, verbose_name="Configuration name")
     provider = models.CharField(max_length=20, choices=Provider.choices, default=Provider.UPI, verbose_name="Provider")
+    environment = models.CharField(max_length=10, choices=Environment.choices, default=Environment.TEST, verbose_name="Environment")
     is_active = models.BooleanField(default=False, db_index=True, verbose_name="Active")
     is_default = models.BooleanField(default=False, verbose_name="Default gateway")
     upi_vpa = models.CharField(max_length=120, blank=True, verbose_name="UPI VPA / merchant address")
@@ -104,8 +109,16 @@ class PaymentGatewayConfig(TimeStampedModel):
     def clean(self) -> None:
         if self.is_default and not self.is_active:
             raise ValidationError({"is_default": "The default payment gateway must also be active."})
-        if self.is_active and not self.upi_vpa.strip():
-            raise ValidationError({"upi_vpa": "An active QR gateway requires a UPI VPA."})
+
+        if self.provider == self.Provider.RAZORPAY:
+            if self.is_active and not self.key_id.strip():
+                raise ValidationError({"key_id": "Razorpay Key ID is required for an active Razorpay gateway."})
+            if self.key_id:
+                expected_prefix = "rzp_test_" if self.environment == self.Environment.TEST else "rzp_live_"
+                if not self.key_id.startswith(expected_prefix):
+                    raise ValidationError({"key_id": f"{self.get_environment_display()} mode requires a Key ID beginning with {expected_prefix}."})
+        elif self.is_active and not self.upi_vpa.strip():
+            raise ValidationError({"upi_vpa": "An active direct UPI / QR gateway requires a UPI VPA."})
 
     @property
     def key_secret(self) -> str:
@@ -123,6 +136,14 @@ class PaymentGatewayConfig(TimeStampedModel):
     def has_webhook_secret(self) -> bool:
         return bool(self.webhook_secret_encrypted)
 
+    @property
+    def is_ready_for_payment(self) -> bool:
+        if not self.is_active or not self.has_webhook_secret:
+            return False
+        if self.provider == self.Provider.RAZORPAY:
+            return bool(self.key_id.strip() and self.has_key_secret)
+        return bool(self.upi_vpa.strip())
+
     def set_key_secret(self, value: str) -> None:
         self.key_secret_encrypted = encrypt_secret(value)
 
@@ -132,6 +153,8 @@ class PaymentGatewayConfig(TimeStampedModel):
     def save(self, *args, **kwargs) -> None:
         if self.is_active and not self.has_webhook_secret:
             raise ValidationError("An active gateway requires a webhook secret. Enter it in Django Admin.")
+        if self.is_active and self.provider == self.Provider.RAZORPAY and not self.has_key_secret:
+            raise ValidationError("An active Razorpay gateway requires an API Key Secret. Enter it in Django Admin.")
         with transaction.atomic():
             if self.is_default:
                 PaymentGatewayConfig.objects.exclude(pk=self.pk).filter(is_default=True).update(is_default=False)
@@ -144,4 +167,4 @@ class PaymentGatewayConfig(TimeStampedModel):
 
     def __str__(self) -> str:
         state = "active" if self.is_active else "disabled"
-        return f"{self.name} ({self.get_provider_display()}, {state})"
+        return f"{self.name} ({self.get_provider_display()}, {self.get_environment_display()}, {state})"

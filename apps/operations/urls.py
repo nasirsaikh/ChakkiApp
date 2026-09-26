@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .razorpay_views import razorpay_verify
 
 app_name = "operations"
 
@@ -13,6 +14,7 @@ urlpatterns = [
     path("grinding/<int:pk>/settle/", views.settle_bill, name="settle_bill"),
     path("grinding/<int:pk>/buyback/", views.order_buyback, name="order_buyback"),
     path("grinding/<int:pk>/request-qr/", views.request_qr_payment, name="request_qr_payment"),
+    path("payments/razorpay/verify/", razorpay_verify, name="razorpay_verify"),
     path("payments/<str:reference>/status/", views.payment_status, name="payment_status"),
     path("rate-card/", views.rate_card, name="rate_card"),
     path("buyback/", views.buyback, name="buyback"),
